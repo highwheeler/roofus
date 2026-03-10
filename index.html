@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Roofus</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', sans-serif;
+            background: #1a1a1a;
+        }
+
+        #toolbar {
+            background: #222;
+            color: #eee;
+            padding: 10px;
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid #444;
+            align-items: center;
+            z-index: 10;
+            flex-wrap: wrap;
+        }
+
+        .divider {
+            width: 1px;
+            height: 24px;
+            background: #444;
+            margin: 0 8px;
+        }
+
+        button {
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 6px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: 0.2s;
+            font-size: 13px;
+        }
+
+        button.active {
+            background: #0078d7;
+            border-color: #005a9e;
+        }
+
+        /* BOM Button Highlight */
+        #btnBOM {
+            border-color: #00ff00;
+            color: #00ff00;
+        }
+        #btnBOM:hover {
+            background: #00ff00;
+            color: #000;
+        }
+
+        /* Visibility Controls Styling */
+        .layer-toggle {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: #ccc;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            user-select: none;
+        }
+
+        .layer-toggle:hover {
+            background: #333;
+        }
+
+        .layer-toggle input {
+            cursor: pointer;
+            margin: 0;
+        }
+
+        #main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            width: 100%;
+            position: relative;
+        }
+
+        /* Pane Styling */
+        .pane {
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #left-pane {
+            width: 30%;
+            background: #fff;
+            min-width: 200px;
+        }
+
+        #right-pane {
+            flex: 1;
+            background: #000;
+            min-width: 200px;
+        }
+
+        /* Sidebar Styling */
+        #sidebar {
+            width: 220px;
+            background: #252526;
+            color: #ccc;
+            border-right: 1px solid #444;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 15px;
+            background: #333;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            border-bottom: 1px solid #444;
+        }
+
+        .sidebar-content {
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .prop-group {
+            margin-bottom: 15px;
+        }
+
+        .prop-group label {
+            display: block;
+            font-size: 11px;
+            margin-bottom: 4px;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        select {
+            width: 100%;
+            background: #3c3c3c;
+            color: white;
+            border: 1px solid #555;
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            outline: none;
+            margin-bottom: 10px;
+        }
+
+        select:focus {
+            border-color: #0078d7;
+        }
+
+        /* Splitter */
+        #splitter {
+            width: 8px;
+            cursor: col-resize;
+            background: #333;
+            border-left: 1px solid #444;
+            border-right: 1px solid #444;
+            transition: background 0.2s;
+            z-index: 5;
+        }
+
+        #splitter:hover {
+            background: #444;
+        }
+
+        .pane-label {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 2px 8px;
+            font-size: 10px;
+            border-radius: 10px;
+            pointer-events: none;
+            text-transform: uppercase;
+        }
+
+        /* Height Indicator for snaps */
+        .snap-hint {
+            font-size: 10px;
+            color: #0078d7;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="toolbar">
+        <button id="btnDraw" class="active">Draw</button>
+        <button id="btnSelect">Select</button>
+        <div class="divider"></div>
+        <button class="premade" data-w="100" data-h="100">100x100</button>
+        <button class="premade" data-w="96" data-h="96">96x96</button>
+        <button class="premade" data-w="200" data-h="100">200x100</button>
+        <div class="divider"></div>
+        <button id="btnUndo">Undo</button>
+        <button id="btnDel" style="color:#ff6b6b">Delete</button>
+        
+        <div class="divider"></div>
+        
+        <label class="layer-toggle"><input type="checkbox" data-layer="posts" checked> Posts</label>
+        <label class="layer-toggle"><input type="checkbox" data-layer="rafters" checked> Framing</label>
+        <label class="layer-toggle"><input type="checkbox" data-layer="fascia" checked> Fascia</label>
+        <label class="layer-toggle"><input type="checkbox" data-layer="soffit" checked> Soffit</label>
+        <label class="layer-toggle"><input type="checkbox" data-layer="sheathing" checked> Sheathing</label>
+        <label class="layer-toggle"><input type="checkbox" data-layer="shingles" checked> Shingles</label>
+
+        <div class="divider"></div>
+        <button id="btnBOM">View BOM</button>
+    </div>
+
+    <div id="main-container">
+        <div id="sidebar">
+            <div class="sidebar-header">Shape Properties</div>
+            <div class="sidebar-content" id="props-form">
+                <p id="no-selection-msg" style="font-style: italic; color: #666; font-size: 13px;">Select a shape to edit properties</p>
+
+                <div id="editor-controls" style="display: none;">
+                    <div class="prop-group">
+                        <label>Post Height: <span id="postHeight-val">96</span>" <span id="postHeight-hint" class="snap-hint"></span></label>
+                        <input type="range" id="postHeight-slider" min="24" max="144" step="1" value="96">
+
+                        <label>Post Size (Thickness)</label>
+                        <select id="postThickness-select">
+                            <option value="4">4x4 (3.5" act.)</option>
+                            <option value="6" selected>6x6 (5.5" act.)</option>
+                            <option value="8">8x8 (7.5" act.)</option>
+                            <option value="10">10x10 (9.5" act.)</option>
+                            <option value="12">12x12 (11.5" act.)</option>                                                                                                                
+                        </select>
+
+                        <label>Beam Depth: <span id="beamDepth-val">9.25</span>"</label>
+                        <input type="range" id="beamDepth-slider" min="3.5" max="11.25" step="0.25" value="9.25">
+
+                        <label>Beam Thickness: <span id="beamThickness-val">1.5</span>"</label>
+                        <input type="range" id="beamThickness-slider" min="1.5" max="7.5" step="0.5" value="3.5">
+
+                        <label>Roof Pitch: <span id="pitch-val">4</span>/12</label>
+                        <input type="range" id="pitch-slider" min="0" max="12" step="1" value="4">
+                        
+                        <label>Rafter Spacing: <span id="spacing-val">24</span>"</label>
+                        <input type="range" id="spacing-slider" min="8" max="48" step="4" value="24">
+
+                        <label>Overhang: <span id="overhang-val">12</span>"</label>
+                        <input type="range" id="overhang-slider" min="0" max="36" step="1" value="12">
+
+                        <label>Rafter Material</label>
+                        <select data-prop="rafterSize">
+                            <option value="2x4">2x4</option>
+                            <option value="2x6">2x6</option>
+                            <option value="2x8">2x8</option>
+                            <option value="2x10">2x10</option>
+                            <option value="2x12">2x12</option>
+                        </select>
+
+                        <label>Edge Rafter (Fly)</label>
+                        <select data-prop="edgeRafterSize">
+                            <option value="1x4">1x4</option>
+                            <option value="2x4">2x4</option>
+                            <option value="2x6">2x6</option>
+                        </select>
+
+                        <label>Fascia Material</label>
+                        <select data-prop="fasciaSize">
+                            <option value="1x6">1x6</option>
+                            <option value="1x8">1x8</option>
+                            <option value="1x10">1x10</option>
+                            <option value="2x6">2x6</option>
+                            <option value="2x8">2x8</option>
+                        </select>
+
+                        <label>Sheathing Size</label>
+                        <select data-prop="plywoodSize">
+                            <option value="4x8">4' x 8'</option>
+                            <option value="4x9">4' x 9'</option>
+                            <option value="4x10">4' x 10'</option>
+                        </select>
+
+                        <label>Sheathing Thickness</label>
+                        <select data-prop="plywoodThickness">
+                            <option value="7/16">7/16"</option>
+                            <option value="15/32">15/32"</option>
+                            <option value="1/2">1/2"</option>
+                            <option value="5/8">5/8"</option>
+                            <option value="3/4">3/4"</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="left-pane" class="pane">
+            <div class="pane-label">2D Editor</div>
+            <svg id="editor-svg" style="width:100%; height:100%; cursor: crosshair; background: white;"></svg>
+        </div>
+
+        <div id="splitter"></div>
+
+        <div id="right-pane" class="pane">
+            <div class="pane-label">3D Viewer</div>
+        </div>
+    </div>
+
+    <script type="importmap" crossorigin="anonymous">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module" crossorigin="anonymous">
+        import { Editor2D } from './Editor2D.js';
+        import { Renderer3D } from './Renderer3D.js';
+        import { BOMVisualizer } from './BOMVisualizer.js';
+
+        const renderer = new Renderer3D(document.getElementById('right-pane'));
+        const editor = new Editor2D(document.getElementById('editor-svg'), (shapes) => {
+            renderer.sync(shapes);
+        });
+
+        const bom = new BOMVisualizer(document.body, renderer.roofGen.group);
+
+        window.editor2d = editor;
+
+        // --- Splitter Logic ---
+        const splitter = document.getElementById('splitter');
+        const leftPane = document.getElementById('left-pane');
+        const container = document.getElementById('main-container');
+        let isDragging = false;
+
+        splitter.onmousedown = () => { isDragging = true; document.body.style.cursor = 'col-resize'; };
+
+        window.onmousemove = (e) => {
+            if (!isDragging) return;
+            const containerRect = container.getBoundingClientRect();
+            const sidebarWidth = document.getElementById('sidebar').offsetWidth;
+            const relativeMouseX = e.clientX - containerRect.left - sidebarWidth;
+            let percentage = (relativeMouseX / (containerRect.width - sidebarWidth)) * 100;
+
+            if (percentage < 10) percentage = 10;
+            if (percentage > 90) percentage = 90;
+
+            requestAnimationFrame(() => {
+                leftPane.style.width = `${percentage}%`;
+                if (renderer && renderer.onWindowResize) renderer.onWindowResize();
+                if (editor.updateViewport) editor.updateViewport();
+            });
+        };
+
+        window.onmouseup = () => { isDragging = false; document.body.style.cursor = 'default'; };
+
+        // --- Toolbar Wiring ---
+        document.getElementById('btnDraw').onclick = () => { editor.mode = 'draw'; updateUI(); };
+        document.getElementById('btnSelect').onclick = () => { editor.mode = 'select'; updateUI(); };
+        document.getElementById('btnUndo').onclick = () => editor.undo();
+        document.getElementById('btnDel').onclick = () => editor.deleteSelected();
+        document.getElementById('btnBOM').onclick = () => {
+            // Passing dummy config, adjust based on your state management
+            bom.toggle({ showSheathing: true });
+        };
+
+        document.querySelectorAll('.premade').forEach(btn => {
+            btn.onclick = () => {
+                editor.createPremade(parseInt(btn.dataset.w), parseInt(btn.dataset.h));
+                editor.mode = 'select';
+                updateUI();
+            };
+        });
+
+        // --- Visibility Toggle Logic ---
+        document.querySelectorAll('.layer-toggle input').forEach(checkbox => {
+            checkbox.onchange = (e) => {
+                const layer = e.target.dataset.layer;
+                const visible = e.target.checked;
+                window.dispatchEvent(new CustomEvent('visibilityChanged', { 
+                    detail: { layer, visible } 
+                }));
+            };
+        });
+
+        function updateUI() {
+            document.getElementById('btnDraw').classList.toggle('active', editor.mode === 'draw');
+            document.getElementById('btnSelect').classList.toggle('active', editor.mode === 'select');
+        }
+
+        // --- Sidebar Properties Logic ---
+        const editorControls = document.getElementById('editor-controls');
+        const noSelectionMsg = document.getElementById('no-selection-msg');
+
+        // Common Heights (in inches) for snapping
+        const COMMON_POST_HEIGHTS = [48, 72, 84, 96, 108, 120, 144];
+
+        document.getElementById('editor-svg').addEventListener('shapeSelected', (e) => {
+            const shape = e.detail;
+            noSelectionMsg.style.display = 'none';
+            editorControls.style.display = 'block';
+
+            editorControls.querySelectorAll('select, input').forEach(ctrl => {
+                const prop = ctrl.dataset.prop || ctrl.id.split('-')[0];
+                if (shape.params && shape.params[prop] !== undefined) {
+                    ctrl.value = shape.params[prop];
+                    const valDisplay = document.getElementById(`${prop}-val`);
+                    if (valDisplay) valDisplay.innerText = ctrl.value;
+                }
+            });
+            updateSnapHint(shape.params.postHeight);
+        });
+
+        document.getElementById('editor-svg').addEventListener('clearSelection', () => {
+            noSelectionMsg.style.display = 'block';
+            editorControls.style.display = 'none';
+        });
+
+        editorControls.addEventListener('input', (e) => {
+            const prop = e.target.dataset.prop || e.target.id.split('-')[0];
+            let value = e.target.value;
+
+            // Handle Snapping for postHeight
+            if (prop === 'postHeight') {
+                const numericVal = parseInt(value);
+                const snapPoint = COMMON_POST_HEIGHTS.find(h => Math.abs(h - numericVal) <= 3);
+                if (snapPoint !== undefined) {
+                    value = snapPoint;
+                    e.target.value = snapPoint; // Force the slider to the snap point
+                }
+                updateSnapHint(value);
+            }
+
+            const valDisplay = document.getElementById(`${prop}-val`);
+            if (valDisplay) valDisplay.innerText = value;
+            editor.updateSelectedParams(prop, value);
+
+            // Refresh BOM if open
+            if (bom.isOpen) bom.refresh({ showSheathing: true });
+        });
+
+        function updateSnapHint(currentVal) {
+            const hint = document.getElementById('postHeight-hint');
+            const h = parseInt(currentVal);
+            if (COMMON_POST_HEIGHTS.includes(h)) {
+                hint.innerText = `(${h / 12}')`;
+            } else {
+                hint.innerText = "";
+            }
+        }
+
+    </script>
+</body>
+</html>

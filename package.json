@@ -1,0 +1,22 @@
+{
+  "name": "roofus",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .js"
+  },
+  "dependencies": {
+    "opencascade.js": "^1.1.1",
+    "three": "^0.164.1",
+    "three-csg-ts": "^3.2.0",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0"
+  },
+  "devDependencies": {
+    "eslint": "^10.0.2",
+    "vite": "^5.0.0"
+  }
+}
