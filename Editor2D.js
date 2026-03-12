@@ -47,7 +47,7 @@ export class Editor2D {
             x: rect.width / 2,
             y: rect.height / 2
         };
-        this.gridSize = 20;
+        this.gridSize = 12;
         this.snapEnabled = true;
 
         // Interaction
@@ -99,8 +99,8 @@ export class Editor2D {
     initLayers() {
         this.svg.innerHTML = `
             <defs>
-                <pattern id="gridPattern" width="20" height="20" patternUnits="userSpaceOnUse">
-                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#ddd" stroke-width="0.5"/>
+                <pattern id="gridPattern" width="12" height="12" patternUnits="userSpaceOnUse">
+                    <path d="M 12 0 L 0 0 0 12" fill="none" stroke="#ddd" stroke-width="0.5"/>
                 </pattern>
             </defs>
             <g id="viewport">
@@ -137,7 +137,7 @@ export class Editor2D {
 
         const delta = -e.deltaY * 0.0015;
         const oldScale = this.scale;
-        const newScale = Math.min(Math.max(this.scale + (this.scale * delta), 0.05), 20);
+        const newScale = Math.min(Math.max(this.scale + (this.scale * delta), 0.05), 12);
 
         this.offset.x = mouseX - (mouseX - this.offset.x) * (newScale / oldScale);
         this.offset.y = mouseY - (mouseY - this.offset.y) * (newScale / oldScale);

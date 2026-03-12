@@ -6,9 +6,8 @@ import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
 
 /**
  * RENDERER 3D
- * [2026-03-01] Always generates whole files.
- * ADDED: STL Export with user-defined scaling.
- * FIXED: Added OBJ and STL buttons to the HUD.
+ * [2026-03-10] Always generates whole files.
+ * FIXED: Resolved "too much recursion" by removing controls.update() from the render loop.
  */
 export class Renderer3D {
     constructor(container) {
@@ -28,19 +27,22 @@ export class Renderer3D {
 
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.screenSpacePanning = true;
-        this.controls.enableDamping = true;
-        this.controls.dampingFactor = 0.05;
+        this.controls.enableDamping = false; 
         this.controls.rotateSpeed = 0.4;
         this.controls.zoomSpeed = 0.8;
         this.controls.panSpeed = 0.6;
         this.controls.enableZoom = true;
 
+        // FIXED: The 'change' event should ONLY trigger the drawing logic, 
+        // NEVER a function that calls controls.update().
+        this.controls.addEventListener('change', () => {
+            this.draw();
+        });
+
         this.roofGen = new RoofGenerator(this.scene);
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
 
-        // Inspection State
-        this.selectedObject = null;
         this.inspectionGroup = new THREE.Group(); 
         this.scene.add(this.inspectionGroup);
 
@@ -75,7 +77,7 @@ export class Renderer3D {
         this.container.addEventListener('mousemove', (e) => this.onMouseMove(e));
         window.addEventListener('resize', () => this.onWindowResize());
 
-        this.animate();
+        this.draw();
     }
 
     createPopupLabel() {
@@ -127,6 +129,7 @@ export class Renderer3D {
         } else {
             this.resetInspection();
         }
+        this.draw(); 
     }
 
     inspectObject(obj) {
@@ -170,9 +173,7 @@ export class Renderer3D {
                 <span style="color:#888">WIDTH:</span> <span>${W}"</span>
                 <span style="color:#888">THICK:</span> <span>${T}"</span>
             </div>
-            <div style="margin-top:12px; font-size:10px; color:#555; text-align:center;">CLICK BACKGROUND TO CLEAR</div>
         `;
-
         this.drawDimensionsFor(obj);
     }
 
@@ -189,11 +190,11 @@ export class Renderer3D {
                 node.material.emissive?.setHex(0x000000);
             }
         });
+        this.draw();
     }
 
     drawDimensionsFor(mesh) {
         if (!mesh.geometry.attributes.position) return;
-
         const posAttr = mesh.geometry.attributes.position;
         const matrix = mesh.matrixWorld;
         const pts = [];
@@ -209,29 +210,20 @@ export class Renderer3D {
                 const dist = pts[i].distanceTo(pts[j]);
                 const dir = new THREE.Vector3().subVectors(pts[j], pts[i]).normalize();
                 const localDir = dir.clone().applyQuaternion(mesh.quaternion.clone().invert());
-                const isOrthogonal = Math.abs(localDir.x) > 0.8 || 
-                                     Math.abs(localDir.y) > 0.8 || 
-                                     Math.abs(localDir.z) > 0.8;
-
-                if (isOrthogonal && dist > 1.0) {
-                    edges.push({ p1: pts[i], p2: pts[j], dist });
-                }
+                const isOrthogonal = Math.abs(localDir.x) > 0.8 || Math.abs(localDir.y) > 0.8 || Math.abs(localDir.z) > 0.8;
+                if (isOrthogonal && dist > 1.0) edges.push({ p1: pts[i], p2: pts[j], dist });
             }
         }
 
         const uniqueEdges = [];
         edges.forEach(edge => {
-            if (!uniqueEdges.some(ue => 
-                (ue.p1.distanceTo(edge.p1) < 1 && ue.p2.distanceTo(edge.p2) < 1) ||
-                (ue.p1.distanceTo(edge.p2) < 1 && ue.p2.distanceTo(edge.p1) < 1)
-            )) {
+            if (!uniqueEdges.some(ue => (ue.p1.distanceTo(edge.p1) < 1 && ue.p2.distanceTo(edge.p2) < 1) || (ue.p1.distanceTo(edge.p2) < 1 && ue.p2.distanceTo(edge.p1) < 1))) {
                 uniqueEdges.push(edge);
             }
         });
 
         uniqueEdges.sort((a, b) => b.dist - a.dist);
         const longest = uniqueEdges[0];
-        
         if (longest) {
             this.createArchitecturalDim(longest.p1, longest.p2, new THREE.Vector3(0, 1, 0), 15, `L: ${longest.dist.toFixed(1)}"`);
         }
@@ -252,25 +244,20 @@ export class Renderer3D {
         const dimColor = 0x00ff00;
         const off1 = p1.clone().addScaledVector(direction, distance);
         const off2 = p2.clone().addScaledVector(direction, distance);
-
         const extMat = new THREE.LineBasicMaterial({ color: 0x666666, transparent: true, opacity: 0.5 });
         this.inspectionGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([p1, off1]), extMat));
         this.inspectionGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([p2, off2]), extMat));
-
         const mainLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([off1, off2]), new THREE.LineBasicMaterial({ color: dimColor }));
         this.inspectionGroup.add(mainLine);
-
         this.addArrowHead(off1, off2, dimColor);
         this.addArrowHead(off2, off1, dimColor);
-
         const mid = new THREE.Vector3().lerpVectors(off1, off2, 0.5);
         this.add3DLabel(text, mid.x, mid.y + 4, mid.z, "#00ff00");
     }
 
     addArrowHead(start, end, color) {
         const dir = new THREE.Vector3().subVectors(end, start).normalize();
-        const arrowHelper = new THREE.ArrowHelper(dir, start, 4, color, 1.5, 1.0);
-        this.inspectionGroup.add(arrowHelper);
+        this.inspectionGroup.add(new THREE.ArrowHelper(dir, start, 4, color, 1.5, 1.0));
     }
 
     isMouseOverHUD(event) {
@@ -282,17 +269,10 @@ export class Renderer3D {
 
     initAxisArrows() {
         const axisLength = 2.2;
-        const axes = [
-            { dir: [1, 0, 0], color: 0xff0000, label: 'X' },
-            { dir: [0, 1, 0], color: 0x00ff00, label: 'Y' },
-            { dir: [0, 0, 1], color: 0x0000ff, label: 'Z' }
-        ];
-
+        const axes = [{ dir: [1, 0, 0], color: 0xff0000, label: 'X' }, { dir: [0, 1, 0], color: 0x00ff00, label: 'Y' }, { dir: [0, 0, 1], color: 0x0000ff, label: 'Z' }];
         axes.forEach(axis => {
             const dir = new THREE.Vector3(...axis.dir);
-            const arrow = new THREE.ArrowHelper(dir, new THREE.Vector3(0, 0, 0), axisLength, axis.color, 0.4, 0.2);
-            this.hudScene.add(arrow);
-
+            this.hudScene.add(new THREE.ArrowHelper(dir, new THREE.Vector3(0, 0, 0), axisLength, axis.color, 0.4, 0.2));
             const canvas = document.createElement('canvas');
             canvas.width = 64; canvas.height = 64;
             const ctx = canvas.getContext('2d');
@@ -300,7 +280,6 @@ export class Renderer3D {
             ctx.fillStyle = '#' + axis.color.toString(16).padStart(6, '0');
             ctx.textAlign = 'center';
             ctx.fillText(axis.label, 32, 48);
-
             const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas) }));
             sprite.position.copy(dir).multiplyScalar(axisLength + 0.6);
             sprite.scale.set(0.8, 0.8, 1);
@@ -315,20 +294,13 @@ export class Renderer3D {
             const canvas = document.createElement('canvas');
             canvas.width = 128; canvas.height = 128;
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#222';
-            ctx.fillRect(0, 0, 128, 128);
-            ctx.strokeStyle = '#666';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(0, 0, 128, 128);
-            ctx.font = 'bold 26px Arial';
-            ctx.fillStyle = '#eee';
-            ctx.textAlign = 'center';
-            ctx.fillText(text, 64, 75);
+            ctx.fillStyle = '#222'; ctx.fillRect(0, 0, 128, 128);
+            ctx.strokeStyle = '#666'; ctx.lineWidth = 4; ctx.strokeRect(0, 0, 128, 128);
+            ctx.font = 'bold 26px Arial'; ctx.fillStyle = '#eee'; ctx.textAlign = 'center'; ctx.fillText(text, 64, 75);
             return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas) });
         });
         this.viewCube = new THREE.Mesh(geometry, materials);
-        this.hudScene.add(this.viewCube);
-        this.hudScene.add(new THREE.AmbientLight(0xffffff, 1));
+        this.hudScene.add(this.viewCube, new THREE.AmbientLight(0xffffff, 1));
     }
 
     initRotationButtons() {
@@ -341,14 +313,10 @@ export class Renderer3D {
             <button id="rot-down" style="${btnStyle}">↓</button>
             <button id="rot-cw" style="${btnStyle}">↻</button>
             <div style="height:20px; width:1px; background:#555; margin: 0 5px;"></div>
-            <label style="color:#aaa; font-size:10px; font-family:sans-serif;">SCALE: 
-                <input type="number" id="export-scale" value="1.0" step="0.1" style="width:45px; background:#222; color:#0f0; border:1px solid #444; padding:2px; font-size:12px;">
-            </label>
-            <button id="export-obj" style="${btnStyle} background:#27ae60;" title="Export OBJ">OBJ</button>
-            <button id="export-stl" style="${btnStyle} background:#2980b9;" title="Export STL">STL</button>
+            <button id="export-obj" style="${btnStyle} background:#27ae60;">OBJ</button>
+            <button id="export-stl" style="${btnStyle} background:#2980b9;">STL</button>
         `;
         this.container.appendChild(ui);
-
         ui.querySelector('#rot-ccw').onclick = () => this.rollCamera(-Math.PI / 2);
         ui.querySelector('#rot-cw').onclick = () => this.rollCamera(Math.PI / 2);
         ui.querySelector('#rot-up').onclick = () => this.tiltCamera(Math.PI / 2);
@@ -357,63 +325,16 @@ export class Renderer3D {
         ui.querySelector('#export-stl').onclick = () => this.exportToSTL();
     }
 
-    getExportScale() {
-        const input = document.getElementById('export-scale');
-        return input ? parseFloat(input.value) || 1.0 : 1.0;
-    }
-
-    /**
-     * CAD EXPORT
-     */
     exportToOBJ() {
         const exporter = new OBJExporter();
-        const scale = this.getExportScale();
-        
-        // Hide helpers
-        const helpers = this.scene.children.filter(c => c.isHelper || c.type === "GridHelper");
-        helpers.forEach(h => h.visible = false);
-        this.inspectionGroup.visible = false;
-
-        // Apply scale temporarily to structural group
-        const structuralGroup = this.scene.children.find(c => c.userData?.isStructuralGroup);
-        if (structuralGroup) structuralGroup.scale.set(scale, scale, scale);
-        
         const result = exporter.parse(this.scene);
-
-        // Restore
-        if (structuralGroup) structuralGroup.scale.set(1, 1, 1);
-        helpers.forEach(h => h.visible = true);
-        this.inspectionGroup.visible = true;
-
         this.downloadFile(result, 'obj');
     }
 
-    /**
-     * STL EXPORT (Binary)
-     */
     exportToSTL() {
         const exporter = new STLExporter();
-        const scale = this.getExportScale();
-
-        // Hide non-geometry
-        const helpers = this.scene.children.filter(c => c.isHelper || c.type === "GridHelper");
-        helpers.forEach(h => h.visible = false);
-        this.inspectionGroup.visible = false;
-
-        // Apply scale
-        const structuralGroup = this.scene.children.find(c => c.userData?.isStructuralGroup);
-        if (structuralGroup) structuralGroup.scale.set(scale, scale, scale);
-
-        // Export as binary for smaller file size
         const result = exporter.parse(this.scene, { binary: true });
-
-        // Restore
-        if (structuralGroup) structuralGroup.scale.set(1, 1, 1);
-        helpers.forEach(h => h.visible = true);
-        this.inspectionGroup.visible = true;
-
-        const blob = new Blob([result], { type: 'application/octet-stream' });
-        this.downloadFile(blob, 'stl');
+        this.downloadFile(new Blob([result], { type: 'application/octet-stream' }), 'stl');
     }
 
     downloadFile(content, ext) {
@@ -421,7 +342,7 @@ export class Renderer3D {
         const url = isBlob ? URL.createObjectURL(content) : URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
         const link = document.createElement('a');
         link.href = url;
-        link.download = `Roof_Export_${new Date().toISOString().slice(0,10)}.${ext}`;
+        link.download = `Roof_Export.${ext}`;
         link.click();
         URL.revokeObjectURL(url);
     }
@@ -430,6 +351,8 @@ export class Renderer3D {
         const dir = this.camera.getWorldDirection(new THREE.Vector3());
         const quat = new THREE.Quaternion().setFromAxisAngle(dir, angle);
         this.camera.up.applyQuaternion(quat);
+        this.controls.update(); // Update once
+        this.draw();
     }
 
     tiltCamera(angle) {
@@ -439,6 +362,8 @@ export class Renderer3D {
         this.camera.up.applyQuaternion(quat);
         this.camera.lookAt(0, 0, 0);
         this.controls.target.set(0, 0, 0);
+        this.controls.update(); // Update once
+        this.draw();
     }
 
     onHUDClick(event) {
@@ -446,7 +371,6 @@ export class Renderer3D {
         const size = 120;
         const x = event.clientX - rect.left - 10;
         const y = rect.height - (event.clientY - rect.top) - 10;
-
         if (x >= 0 && x <= size && y >= 0 && y <= size) {
             const pointer = new THREE.Vector2((x / size) * 2 - 1, (y / size) * 2 - 1);
             this.raycaster.setFromCamera(pointer, this.hudCamera);
@@ -457,25 +381,22 @@ export class Renderer3D {
 
     orientCamera(faceIndex) {
         const dist = this.camera.position.length() || 800;
-        const targets = [
-            [dist, 0, 0], [-dist, 0, 0], [0, dist, 0], [0, -dist, 0], [0, 0, dist], [0, 0, -dist]
-        ];
+        const targets = [[dist, 0, 0], [-dist, 0, 0], [0, dist, 0], [0, -dist, 0], [0, 0, dist], [0, 0, -dist]];
         const t = targets[faceIndex];
         this.camera.position.set(t[0], t[1], t[2]);
         this.camera.up.set(0, (faceIndex === 2 || faceIndex === 3) ? 0 : 1, faceIndex === 2 ? -1 : 1);
         this.camera.lookAt(0, 0, 0);
         this.controls.target.set(0, 0, 0);
+        this.controls.update(); // Update once
+        this.draw();
     }
 
     onMouseMove(event) {
         const rect = this.container.getBoundingClientRect();
         this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        const intersects = this.raycaster.intersectObjects(this.scene.children, true)
-            .filter(h => !h.object.isHelper && h.object.visible);
-
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true).filter(h => !h.object.isHelper && h.object.visible);
         if (intersects.length > 0) {
             const p = intersects[0].point;
             this.measureLabel.style.display = 'block';
@@ -489,30 +410,24 @@ export class Renderer3D {
 
     sync(shapes) {
          this.roofGen.generate(shapes);
+         this.draw();
     }
 
     add3DLabel(text, x, y, z, color = "#00ffcc") {
         const canvas = document.createElement('canvas');
         canvas.width = 256; canvas.height = 64;
         const ctx = canvas.getContext('2d');
-        ctx.font = 'bold 24px Arial';
-        ctx.fillStyle = color;
-        ctx.textAlign = 'center';
-        ctx.fillText(text, 128, 42);
-
-        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-            map: new THREE.CanvasTexture(canvas),
-            depthTest: false
-        }));
-        sprite.position.set(x, y, z);
-        sprite.scale.set(30, 7.5, 1);
-        sprite.isHelper = true;
+        ctx.font = 'bold 24px Arial'; ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.fillText(text, 128, 42);
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthTest: false }));
+        sprite.position.set(x, y, z); sprite.scale.set(30, 7.5, 1); sprite.isHelper = true;
         this.inspectionGroup.add(sprite);
     }
 
-    animate() {
-        requestAnimationFrame(() => this.animate());
-        this.controls.update();
+    /**
+     * DRAW
+     * Pure rendering logic without any camera state modification.
+     */
+    draw() {
         this.saveCameraState(this.camera, this.controls);
         this.renderer.clear();
         this.renderer.render(this.scene, this.camera);
@@ -527,11 +442,7 @@ export class Renderer3D {
     }
 
     saveCameraState(camera, controls) {
-        const state = {
-            position: camera.position.toArray(),
-            quaternion: camera.quaternion.toArray(),
-            target: controls.target.toArray() 
-        };
+        const state = { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), target: controls.target.toArray() };
         localStorage.setItem('roof_camera_view', JSON.stringify(state));
     }
 
@@ -554,5 +465,6 @@ export class Renderer3D {
         this.camera.aspect = w / h;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(w, h);
+        this.draw();
     }
 }

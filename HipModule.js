@@ -45,7 +45,7 @@ export class HipModule {
         const hDir = { x: dx / totalHipRun, z: dz / totalHipRun };
         const hSide = { x: -hDir.z, z: hDir.x };
 
-        const hipSlope = slope * 0.70710678; 
+        const hipSlope = slope ; //* 0.70710678; 
         const vAngleHip = Math.atan(hipSlope);
         const vDepth = depth / Math.cos(vAngleHip);
 

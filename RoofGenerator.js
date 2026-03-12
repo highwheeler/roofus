@@ -11,11 +11,12 @@ import { PostModule } from './PostModule.js';
 import { ShingleModule } from './ShingleModule.js';
 import { SupportingBeamModule } from './SupportingBeamModule.js';
 import { KneeBraceModule } from './KneeBraceModule.js';
+import { DrillModule } from './DrillModule.js';
 
 /**
- * ROOF GENERATOR v23.1
- * [2026-02-24] Always generates whole files.
- * UPDATED: [2026-02-26] renderModule now correctly maps bData.userData to mesh.userData for BOM.
+ * ROOF GENERATOR v23.2
+ * [2026-03-10] Always generates whole files.
+ * UPDATED: Added DrillModule integration for knee brace thru-bolt visualization.
  */
 export class RoofGenerator {
     constructor(scene) {
@@ -56,7 +57,8 @@ export class RoofGenerator {
                 color: 0x5d4037, 
                 flatShading: true,
                 side: THREE.DoubleSide
-            })
+            }),
+            drill: new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true })
         };
 
         window.addEventListener('visibilityChanged', (e) => {
@@ -149,6 +151,7 @@ export class RoofGenerator {
                 braceThickness: parseFloat(p.braceThickness || 3.5),
                 braceWidth: parseFloat(p.braceWidth || 5.5),
                 braceOffset: parseFloat(p.braceOffset || 12),
+                drillDiameter: parseFloat(p.drillDiameter || 0.625),
                 slope, overhang, hapOffset, wallRun, overhangY, rafterSpacing
             };
 
@@ -164,7 +167,21 @@ export class RoofGenerator {
             if (this.flags.posts) {
                 this.renderModule(PostModule.create(wallPts, config), this.mats.post, "Post", 0);
                 this.renderModule(SupportingBeamModule.create(wallPts, config), this.mats.beam, "Header", slope);
-                this.renderModule(KneeBraceModule.create(wallPts, config), this.mats.lumber, "Knee Brace", 0);
+                
+                const braceData = KneeBraceModule.create(wallPts, config);
+                this.renderModule(braceData, this.mats.lumber, "Knee Brace", 0);
+
+                // Add Drill Holes for Knee Braces
+                if (braceData && braceData.boards) {
+                    braceData.boards.forEach(braceBoard => {
+                        const hole = DrillModule.createKneeBraceHole(braceBoard, config);
+                        if (hole) {
+                            const drillMesh = DrillModule.getVisualMesh(hole);
+                            this.group.add(drillMesh);
+                            this.solids.push(drillMesh);
+                        }
+                    });
+                }
             }
 
             // 3. Fascia & Soffit
@@ -200,8 +217,6 @@ export class RoofGenerator {
             geo.computeVertexNormals();
             const mesh = new THREE.Mesh(geo, mat);
 
-            // UPDATED: Transfer userData from module data (containing sourceVertices/basis)
-            // to the mesh userData so BOMReport can access it.
             mesh.userData = { 
                 ...(bData.userData || {}), 
                 id: bData.id || `${type}_${idx}`, 
